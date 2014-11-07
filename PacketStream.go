@@ -41,7 +41,7 @@ func (w *packetStream) readPackets() {
 					log.Fatalf("Invalid packet size. Wanted: %d Read: %d", length, i)
 				}
 
-				log.Printf("Got packet of size %d", length)
+				//log.Printf("Got packet of size %d", length)
 
 				w.packets <- &packet
 			}

@@ -2,9 +2,9 @@ package controllers
 
 import (
 	"encoding/json"
-	"log"
 	"time"
 
+	log "github.com/cihub/seelog"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/jonaz/go-castv2"
 	"github.com/jonaz/go-castv2/api"
@@ -13,13 +13,13 @@ import (
 type MediaController struct {
 	interval time.Duration
 	channel  *castv2.Channel
-	Incoming chan *StatusResponse
+	Incoming chan *MediaStatusResponse
 }
 
 func NewMediaController(client *castv2.Client, sourceId, destinationId string) *MediaController {
 	controller := &MediaController{
 		channel:  client.NewChannel(sourceId, destinationId, "urn:x-cast:com.google.cast.media"),
-		Incoming: make(chan *StatusResponse, 0),
+		Incoming: make(chan *MediaStatusResponse, 0),
 	}
 
 	controller.channel.OnMessage("MEDIA_STATUS", controller.onStatus)
@@ -30,31 +30,45 @@ func NewMediaController(client *castv2.Client, sourceId, destinationId string) *
 func (c *MediaController) onStatus(message *api.CastMessage) {
 	spew.Dump("Got status message", message)
 
-	response := &StatusResponse{}
+	response := &MediaStatusResponse{}
 
 	err := json.Unmarshal([]byte(*message.PayloadUtf8), response)
 
 	if err != nil {
-		log.Printf("Failed to unmarshal status message:%s - %s", err, *message.PayloadUtf8)
+		log.Errorf("Failed to unmarshal status message:%s - %s", err, *message.PayloadUtf8)
 		return
 	}
 
 	select {
 	case c.Incoming <- response:
 	default:
-		log.Printf("Incoming status, but we aren't listening. %v", response)
+		log.Warnf("Incoming status, but we aren't listening. %v", response)
 	}
 
 }
 
-//type StatusResponse struct {
-//Status *ReceiverStatus `json:"status,omitempty"`
-//}
+type MediaStatusResponse struct {
+	Status []*MediaStatus `json:"status,omitempty"`
+}
 
-//type ReceiverStatus struct {
-//castv2.PayloadHeaders
-//Volume *VolumePayload `json:"volume,omitempty"`
-//}
+type MediaStatus struct {
+	MediaSessionId         int               `json:"mediaSessionId,omitempty"`
+	Media                  *MediaInformation `json:"media,omitempty"`
+	PlaybackRate           float32           `json:"playbackRate,omitempty"`
+	PlayerState            string            `json:"playerState,omitempty"`
+	IdleReason             string            `json:"idleReason,omitempty"`
+	CurrentTime            float32           `json:"currentTime,omitempty"`
+	SupportedMediaCommands int               `json:"supportedMediaCommands,omitempty"`
+	Volume                 *VolumePayload    `json:"volume,omitempty"`
+}
+
+type MediaInformation struct {
+	ContentId   string `json:"contentId,omitempty"`
+	StreamType  string `json:"streamType,omitempty"`
+	ContentType string `json:"contentType,omitempty"`
+	//MetaData    []string `json:"metaData,omitempty"`
+	Duration float32 `json:"duration,omitempty"`
+}
 
 //type VolumePayload struct {
 //Level *float64 `json:"level,omitempty"`

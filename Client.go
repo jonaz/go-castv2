@@ -4,11 +4,11 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
 
 	"code.google.com/p/gogoprotobuf/proto"
 
+	log "github.com/cihub/seelog"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/jonaz/go-castv2/api"
 )
@@ -34,7 +34,7 @@ func (h *PayloadHeaders) getRequestId() int {
 
 func NewClient(host net.IP, port int) (*Client, error) {
 
-	log.Printf("connecting to %s:%d ...", host, port)
+	log.Infof("connecting to %s:%d ...", host, port)
 
 	conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", host, port), &tls.Config{
 		InsecureSkipVerify: true,
@@ -61,23 +61,29 @@ func NewClient(host net.IP, port int) (*Client, error) {
 			message := &api.CastMessage{}
 			err = proto.Unmarshal(*packet, message)
 			if err != nil {
-				log.Fatalf("Failed to unmarshal CastMessage: %s", err)
+				log.Errorf("Failed to unmarshal CastMessage: %s", err)
+				continue
 			}
-
-			spew.Dump("Message!", message)
 
 			var headers PayloadHeaders
 
 			err := json.Unmarshal([]byte(*message.PayloadUtf8), &headers)
 
 			if err != nil {
-				log.Fatalf("Failed to unmarshal message: %s", err)
+				log.Errorf("Failed to unmarshal message: %s", err)
+				continue
 			}
 
+			log.Debug("Got message in namepspace: " + *message.Namespace)
+
+			deliverd := false
 			for _, channel := range client.channels {
-				channel.message(message, &headers)
+				deliverd = deliverd || channel.message(message, &headers)
 			}
 
+			if !deliverd {
+				spew.Dump("Lost message (no one is lisening):", message)
+			}
 		}
 	}()
 
@@ -118,7 +124,8 @@ func (c *Client) Send(message *api.CastMessage) error {
 		return err
 	}
 
-	spew.Dump("Writing", message)
+	//spew.Dump("Writing", message)
+	log.Trace("SEND: ", message)
 
 	_, err = c.conn.Write(&data)
 
