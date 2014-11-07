@@ -10,12 +10,13 @@ import (
 	"code.google.com/p/gogoprotobuf/proto"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/ninjasphere/go-castv2/api"
+	"github.com/jonaz/go-castv2/api"
 )
 
 type Client struct {
-	conn     *packetStream
-	channels []*Channel
+	conn      *packetStream
+	channels  []*Channel
+	requestId int
 }
 
 type PayloadHeaders struct {

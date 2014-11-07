@@ -6,7 +6,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/ninjasphere/go-castv2/api"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/jonaz/go-castv2/api"
 )
 
 type Channel struct {
@@ -14,9 +15,9 @@ type Channel struct {
 	sourceId      string
 	destinationId string
 	namespace     string
-	requestId     int
-	inFlight      map[int]chan *api.CastMessage
-	listeners     []channelListener
+	//requestId     int
+	inFlight  map[int]chan *api.CastMessage
+	listeners []channelListener
 }
 
 type channelListener struct {
@@ -31,7 +32,7 @@ type hasRequestId interface {
 
 func (c *Channel) message(message *api.CastMessage, headers *PayloadHeaders) {
 
-	//	spew.Dump("XXX", message, c)
+	spew.Dump("RAW MESSAGE", message)
 
 	if *message.DestinationId != "*" && (*message.SourceId != c.destinationId || *message.DestinationId != c.sourceId || *message.Namespace != c.namespace) {
 		return
@@ -88,9 +89,11 @@ func (c *Channel) Send(payload interface{}) error {
 func (c *Channel) Request(payload hasRequestId, timeout time.Duration) (*api.CastMessage, error) {
 
 	// TODO: Need locking here
-	c.requestId++
+	c.client.requestId++
+	//c.requestId++
 
-	payload.setRequestId(c.requestId)
+	//payload.setRequestId(c.requestId)
+	payload.setRequestId(c.client.requestId)
 
 	response := make(chan *api.CastMessage)
 
