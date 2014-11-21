@@ -29,6 +29,10 @@ type hasRequestId interface {
 	getRequestId() int
 }
 
+func (c *Channel) Close() {
+	c.client.CloseChannel(c)
+}
+
 func (c *Channel) message(message *api.CastMessage, headers *PayloadHeaders) bool {
 
 	//spew.Dump("RAW MESSAGE", message)

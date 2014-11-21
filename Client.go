@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"time"
 
 	"code.google.com/p/gogoprotobuf/proto"
 
@@ -17,6 +18,11 @@ type Client struct {
 	conn      *packetStream
 	channels  []*Channel
 	requestId int
+
+	Connection *Channel
+	HeartBeat  *Channel
+
+	heartBeatTicker *time.Ticker
 }
 
 type PayloadHeaders struct {
@@ -51,9 +57,6 @@ func NewClient(host net.IP, port int) (*Client, error) {
 		channels: make([]*Channel, 0),
 	}
 
-	/*connection := client.NewChannel("sender-0", "receiver-0", "urn:x-cast:com.google.cast.tp.connection")
-	connection.Send(&PayloadHeaders{Type: "CONNECT"})*/
-
 	go func() {
 		for {
 			packet := wrapper.Read()
@@ -74,7 +77,7 @@ func NewClient(host net.IP, port int) (*Client, error) {
 				continue
 			}
 
-			log.Debug("Got message in namepspace: " + *message.Namespace)
+			log.Trace("Channels: ", len(client.channels), " Got message in namepspace: "+*message.Namespace)
 
 			deliverd := false
 			for _, channel := range client.channels {
@@ -87,15 +90,24 @@ func NewClient(host net.IP, port int) (*Client, error) {
 		}
 	}()
 
-	/*go func() {
+	client.Connection = client.NewChannel("sender-0", "receiver-0", "urn:x-cast:com.google.cast.tp.connection")
+	client.Connection.Send(PayloadHeaders{Type: "CONNECT"})
 
-		heartbeat := client.NewChannel("sender-0", "receiver-0", "urn:x-cast:com.google.cast.tp.heartbeat")
-		ping := PayloadHeaders{Type: "PING"}
+	client.HeartBeat = client.NewChannel("sender-0", "receiver-0", "urn:x-cast:com.google.cast.tp.heartbeat")
+	client.HeartBeat.OnMessage("PING", func(_ *api.CastMessage) {
+		client.HeartBeat.Send(PayloadHeaders{Type: "PONG"})
+	})
+	client.HeartBeat.OnMessage("PONG", func(_ *api.CastMessage) {
+
+	})
+
+	client.heartBeatTicker = time.NewTicker(time.Second * 5)
+	go func() {
 		for {
-			time.Sleep(5 * time.Second)
-			heartbeat.Send(&ping)
+			<-client.heartBeatTicker.C
+			client.HeartBeat.Send(PayloadHeaders{Type: "PING"})
 		}
-	}()*/
+	}()
 
 	return client, nil
 }
@@ -115,6 +127,24 @@ func (c *Client) NewChannel(sourceId, destinationId, namespace string) *Channel 
 	return channel
 }
 
+func (c *Client) CloseChannel(channel *Channel) {
+	log.Warn("CLOSE channel, len:", len(c.channels))
+
+	for i, item := range c.channels {
+		if item == channel {
+
+			if len(c.channels) > i {
+				log.Error("FOUND channel in the middle, deleting")
+				c.channels = append(c.channels[:i], c.channels[i+1:]...)
+			} else {
+				log.Error("FOUND channel in the end, deleting")
+				c.channels = c.channels[:i]
+			}
+		}
+	}
+	log.Warn("CLOSE channel, after:", len(c.channels))
+}
+
 func (c *Client) Send(message *api.CastMessage) error {
 
 	proto.SetDefaults(message)
@@ -125,7 +155,7 @@ func (c *Client) Send(message *api.CastMessage) error {
 	}
 
 	//spew.Dump("Writing", message)
-	log.Trace("SEND: ", message)
+	//log.Trace("SEND: ", message)
 
 	_, err = c.conn.Write(&data)
 

@@ -5,30 +5,60 @@ import (
 	"time"
 
 	log "github.com/cihub/seelog"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/jonaz/go-castv2"
 	"github.com/jonaz/go-castv2/api"
 )
 
 type MediaController struct {
-	interval time.Duration
-	channel  *castv2.Channel
-	Incoming chan *MediaStatusResponse
+	endpoint   string
+	interval   time.Duration
+	channel    *castv2.Channel
+	connection *castv2.Channel
+	Incoming   chan *MediaStatusResponse
 }
 
 func NewMediaController(client *castv2.Client, sourceId, destinationId string) *MediaController {
 	controller := &MediaController{
-		channel:  client.NewChannel(sourceId, destinationId, "urn:x-cast:com.google.cast.media"),
-		Incoming: make(chan *MediaStatusResponse, 0),
+		endpoint:   "urn:x-cast:com.google.cast.media",
+		channel:    client.NewChannel(sourceId, destinationId, "urn:x-cast:com.google.cast.media"),
+		connection: client.NewChannel("sender-0", destinationId, "urn:x-cast:com.google.cast.tp.connection"),
+		Incoming:   make(chan *MediaStatusResponse),
 	}
+	// Connect to the endpoint
+	controller.connection.Send(castv2.PayloadHeaders{Type: "CONNECT"})
+	controller.connection.OnMessage("CONNECT", controller.connected)
+	controller.connection.OnMessage("CLOSE", controller.disconnected)
 
+	// Listen for media updates
 	controller.channel.OnMessage("MEDIA_STATUS", controller.onStatus)
 
 	return controller
 }
 
+func (c *MediaController) connected(_ *api.CastMessage) {
+	log.Info("Connected to ", c.endpoint)
+
+	// Request a status update when we are connected
+	c.GetStatus(time.Second)
+}
+
+func (c *MediaController) disconnected(_ *api.CastMessage) {
+	log.Info("Disconnected from ", c.endpoint)
+	c.channel.Close()
+	c.connection.Close()
+
+	if c.Incoming != nil {
+		select {
+		case c.Incoming <- nil:
+		default:
+		}
+
+		c.Incoming = nil
+	}
+}
+
 func (c *MediaController) onStatus(message *api.CastMessage) {
-	spew.Dump("Got status message", message)
+	//spew.Dump("Got status message", message)
 
 	response := &MediaStatusResponse{}
 
@@ -40,11 +70,10 @@ func (c *MediaController) onStatus(message *api.CastMessage) {
 	}
 
 	select {
-	case c.Incoming <- response:
+	case c.Incoming <- response: // Try to transport the message back to the APP
 	default:
 		log.Warnf("Incoming status, but we aren't listening. %v", response)
 	}
-
 }
 
 type MediaStatusResponse struct {

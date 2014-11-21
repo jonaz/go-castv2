@@ -5,22 +5,24 @@ import (
 	"time"
 
 	log "github.com/cihub/seelog"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/jonaz/go-castv2"
 	"github.com/jonaz/go-castv2/api"
 )
 
 type PlexController struct {
-	interval time.Duration
-	channel  *castv2.Channel
-	Incoming chan *MediaStatusResponse
+	interval   time.Duration
+	channel    *castv2.Channel
+	connection *castv2.Channel
+	Incoming   chan *MediaStatusResponse
 }
 
 func NewPlexController(client *castv2.Client, sourceId, destinationId string) *MediaController {
 	controller := &MediaController{
-		channel:  client.NewChannel(sourceId, destinationId, "urn:x-cast:plex"),
-		Incoming: make(chan *MediaStatusResponse, 0),
+		channel:    client.NewChannel(sourceId, destinationId, "urn:x-cast:plex"),
+		connection: client.NewChannel("sender-0", destinationId, "urn:x-cast:com.google.cast.tp.connection"),
+		Incoming:   make(chan *MediaStatusResponse, 0),
 	}
+	controller.connection.Send(castv2.PayloadHeaders{Type: "CONNECT"})
 
 	controller.channel.OnMessage("MEDIA_STATUS", controller.onStatus)
 
@@ -28,7 +30,7 @@ func NewPlexController(client *castv2.Client, sourceId, destinationId string) *M
 }
 
 func (c *PlexController) onStatus(message *api.CastMessage) {
-	spew.Dump("Got status message", message)
+	//spew.Dump("Got status message", message)
 
 	response := &MediaStatusResponse{}
 
