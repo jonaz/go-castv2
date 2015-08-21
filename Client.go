@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	"code.google.com/p/gogoprotobuf/proto"
+	"github.com/gogo/protobuf/proto"
 
 	log "github.com/cihub/seelog"
 	"github.com/davecgh/go-spew/spew"
